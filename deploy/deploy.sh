@@ -25,7 +25,7 @@ echo ""
 echo "[1/8] Installing system dependencies..."
 apt-get update
 apt-get install -y \
-    python3.11 python3.11-venv python3-pip \
+    python3 python3-venv python3-pip \
     postgresql postgresql-contrib \
     redis-server \
     nginx \
@@ -81,7 +81,7 @@ systemctl start redis-server
 # --- 6. Setup backend ---
 echo "[6/8] Setting up backend..."
 cd "$APP_DIR/backend"
-sudo -u "$APP_USER" python3.11 -m venv .venv
+sudo -u "$APP_USER" python3 -m venv .venv
 sudo -u "$APP_USER" .venv/bin/pip install --upgrade pip
 sudo -u "$APP_USER" .venv/bin/pip install -r requirements.txt
 
