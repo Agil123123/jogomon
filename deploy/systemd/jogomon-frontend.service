@@ -8,7 +8,6 @@ User=jogomon
 Group=jogomon
 WorkingDirectory=/opt/jogomon/frontend
 Environment="NODE_ENV=production"
-Environment="NEXT_PUBLIC_API_URL=http://103.20.88.83/api"
 ExecStart=/usr/bin/npm start -- -H 127.0.0.1 -p 3100
 Restart=on-failure
 RestartSec=10

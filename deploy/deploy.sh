@@ -1,6 +1,6 @@
 #!/bin/bash
 # JOGO-MON Production Deployment Script
-# Target: VPS 103.20.88.83 (Ubuntu/Debian)
+# Target: VPS Ubuntu/Debian
 # Run as root: ./deploy.sh
 
 set -e
@@ -11,8 +11,8 @@ REPO_URL="https://github.com/Agil123123/jogomon.git"
 BRANCH="main"
 DB_PASSWORD="${DB_PASSWORD:?Set DB_PASSWORD before running deploy.sh}"
 SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD before running deploy.sh}"
-PUBLIC_API_URL="${PUBLIC_API_URL:-http://103.20.88.83/api}"
-CORS_ORIGINS="${CORS_ORIGINS:-http://103.20.88.83}"
+PUBLIC_API_URL="${PUBLIC_API_URL:?Set PUBLIC_API_URL before running deploy.sh}"
+CORS_ORIGINS="${CORS_ORIGINS:?Set CORS_ORIGINS before running deploy.sh}"
 
 auto_db_password="${DB_PASSWORD//\\/\\\\}"
 auto_db_password="${auto_db_password//\'/\'\'}"
