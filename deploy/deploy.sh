@@ -98,7 +98,7 @@ if [ ! -f "$APP_DIR/.env" ]; then
     sed -i "s|CREDENTIAL_KEY=.*|CREDENTIAL_KEY=$CREDENTIAL_KEY|" "$APP_DIR/.env"
     sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=$CORS_ORIGINS|" "$APP_DIR/.env"
     sed -i "s|POLLING_ENABLED=.*|POLLING_ENABLED=true|" "$APP_DIR/.env"
-    sed -i "s|DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://fams:$auto_db_password@localhost:5432/olt_monitoring|" "$APP_DIR/.env"
+    sed -i "s|DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://fams:$auto_db_password@localhost:5432/olt_monitoring?sslmode=disable|" "$APP_DIR/.env"
     sed -i "s|SEED_ADMIN_PASSWORD=.*|SEED_ADMIN_PASSWORD=$SEED_ADMIN_PASSWORD|" "$APP_DIR/.env"
 fi
 
