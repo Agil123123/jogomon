@@ -1,0 +1,1 @@
+"""Lapisan polling — kontrak di `base.py`, adapter vendor di `adapters/`."""

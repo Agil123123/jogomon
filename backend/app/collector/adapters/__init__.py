@@ -1,0 +1,1 @@
+"""Registry adapter vendor. Vendor baru = package baru di sini."""

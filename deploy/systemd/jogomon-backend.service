@@ -1,0 +1,26 @@
+[Unit]
+Description=JOGO-MON Backend API (FastAPI + Uvicorn)
+After=network.target postgresql.service redis-server.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=jogomon
+Group=jogomon
+WorkingDirectory=/opt/jogomon/backend
+Environment="PATH=/opt/jogomon/backend/.venv/bin"
+ExecStart=/opt/jogomon/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100 --workers 2 --log-level info
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/jogomon/backend
+
+[Install]
+WantedBy=multi-user.target
