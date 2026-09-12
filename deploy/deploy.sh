@@ -7,8 +7,16 @@ set -e
 
 APP_DIR="/opt/jogomon"
 APP_USER="jogomon"
-REPO_URL="git@github.com:joglonet/jogomon.git"  # CHANGE ME
+REPO_URL="https://github.com/Agil123123/jogomon.git"
 BRANCH="main"
+DB_PASSWORD="${DB_PASSWORD:?Set DB_PASSWORD before running deploy.sh}"
+SEED_ADMIN_PASSWORD="${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD before running deploy.sh}"
+PUBLIC_API_URL="${PUBLIC_API_URL:-http://103.20.88.83/api}"
+CORS_ORIGINS="${CORS_ORIGINS:-http://103.20.88.83}"
+
+auto_db_password="${DB_PASSWORD//\\/\\\\}"
+auto_db_password="${auto_db_password//\'/\'\'}"
+export DB_PASSWORD SEED_ADMIN_PASSWORD
 
 echo "=== JOGO-MON Production Deployment ==="
 echo ""
@@ -41,26 +49,29 @@ fi
 
 # --- 3. Clone/update repository ---
 echo "[3/8] Setting up application directory..."
-if [ ! -d "$APP_DIR" ]; then
-    mkdir -p "$APP_DIR"
-    cd "$APP_DIR"
-    git clone "$REPO_URL" .
+if [ ! -d "$APP_DIR/.git" ]; then
+    rm -rf "$APP_DIR"
+    git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 else
     cd "$APP_DIR"
-    git fetch origin
+    git fetch origin "$BRANCH"
     git checkout "$BRANCH"
-    git pull origin "$BRANCH"
+    git pull --ff-only origin "$BRANCH"
 fi
 
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 # --- 4. Setup PostgreSQL ---
 echo "[4/8] Configuring PostgreSQL..."
-sudo -u postgres psql <<EOF
-CREATE USER fams WITH PASSWORD 'CHANGEME_STRONG_PASSWORD';
-CREATE DATABASE olt_monitoring OWNER fams;
+sudo -u postgres psql -v ON_ERROR_STOP=1 -v db_password="$auto_db_password" <<'SQL'
+SELECT format('CREATE ROLE fams LOGIN PASSWORD %L', :'db_password')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fams')\gexec
+SELECT format('ALTER ROLE fams LOGIN PASSWORD %L', :'db_password')
+WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = 'fams')\gexec
+SELECT 'CREATE DATABASE olt_monitoring OWNER fams'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'olt_monitoring')\gexec
 GRANT ALL PRIVILEGES ON DATABASE olt_monitoring TO fams;
-EOF
+SQL
 
 # --- 5. Setup Redis ---
 echo "[5/8] Configuring Redis..."
@@ -85,15 +96,17 @@ if [ ! -f "$APP_DIR/.env" ]; then
     
     sed -i "s|SECRET_KEY=.*|SECRET_KEY=$SECRET_KEY|" "$APP_DIR/.env"
     sed -i "s|CREDENTIAL_KEY=.*|CREDENTIAL_KEY=$CREDENTIAL_KEY|" "$APP_DIR/.env"
-    sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=http://103.20.88.83,http://jogomon.joglonet.id|" "$APP_DIR/.env"
+    sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=$CORS_ORIGINS|" "$APP_DIR/.env"
     sed -i "s|POLLING_ENABLED=.*|POLLING_ENABLED=true|" "$APP_DIR/.env"
-    sed -i "s|DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://fams:CHANGEME_STRONG_PASSWORD@localhost:5432/olt_monitoring|" "$APP_DIR/.env"
-    
-    echo "⚠️  IMPORTANT: Edit $APP_DIR/.env and set SEED_ADMIN_PASSWORD!"
+    sed -i "s|DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://fams:$auto_db_password@localhost:5432/olt_monitoring|" "$APP_DIR/.env"
+    sed -i "s|SEED_ADMIN_PASSWORD=.*|SEED_ADMIN_PASSWORD=$SEED_ADMIN_PASSWORD|" "$APP_DIR/.env"
 fi
 
 chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"
+
+# Keep existing production secrets on redeploy; fail if required values are absent.
+grep -q '^SEED_ADMIN_PASSWORD=.' "$APP_DIR/.env" || { echo "SEED_ADMIN_PASSWORD missing in $APP_DIR/.env" >&2; exit 1; }
 
 # Run migrations
 sudo -u "$APP_USER" .venv/bin/alembic upgrade head
@@ -102,7 +115,7 @@ sudo -u "$APP_USER" .venv/bin/alembic upgrade head
 echo "[7/8] Setting up frontend..."
 cd "$APP_DIR/frontend"
 sudo -u "$APP_USER" npm ci
-sudo -u "$APP_USER" npm run build
+sudo -u "$APP_USER" env NEXT_PUBLIC_API_URL="$PUBLIC_API_URL" npm run build
 
 # --- 8. Setup systemd services ---
 echo "[8/8] Installing systemd services..."
