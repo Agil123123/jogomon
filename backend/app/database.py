@@ -56,23 +56,20 @@ async def init_db() -> None:
     from app import models  # noqa: F401  — pastikan semua model ter-register
 
     async with engine.begin() as conn:
-        # Cek apakah Alembic sudah pernah jalan di DB ini
         result = await conn.execute(
             sa.text(
                 "SELECT EXISTS ("
                 "  SELECT FROM information_schema.tables "
-                "  WHERE table_name = 'alembic_version'"
+                "  WHERE table_name = 'users'"
                 ")"
             )
         )
-        alembic_present = result.scalar()
-
-        if alembic_present:
-            logger.info("Schema dikelola Alembic — create_all dilewati")
+        if result.scalar():
+            logger.info("Schema tersedia — create_all dilewati")
             return
 
         await conn.run_sync(Base.metadata.create_all)
-        logger.info("Schema database siap (create_all — dev mode)")
+        logger.info("Schema database siap (create_all)")
 
 
 async def close_db() -> None:
