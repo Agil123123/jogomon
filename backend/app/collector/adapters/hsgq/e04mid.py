@@ -72,6 +72,43 @@ COLLECT_COMMANDS: tuple[str, ...] = (
 
 
 # --------------------------------------------------------------------------
+# Dialek EPON (HSGQ-E04MID varian EPON, mis. firmware *_IRT_*)
+# --------------------------------------------------------------------------
+#
+# Berbeda total dari dialek GPON di atas: perintah `show` global GPON
+# (`show pon state`, `show onu info`, ...) ditolak "Unknown command". EPON
+# butuh masuk mode enable→config dulu, lalu memakai perintah per-port
+# (`show onu-info <port> all`, `show optical-diag <port>`). Kunci ONU-nya
+# dua tingkat `port/onu` (bukan `slot/port:onu` gaya GPON), jadi slot
+# dipatok 0 saat dipetakan ke model (slot, port).
+#
+# Deteksi: `show pon-info` mengembalikan tabel PON EPON (PON01 Up 25/27);
+# kalau parser EPON menghasilkan minimal satu port, jalur EPON dipakai.
+
+# Masuk privileged + config mode. Wajib di EPON; di firmware lain paling
+# banter menghasilkan error yang tidak berbahaya.
+CMD_EPON_ENTER: tuple[str, ...] = ("enable", "configure")
+
+CMD_EPON_PON_INFO = "show pon-info"
+CMD_EPON_VERSION = "show version"
+CMD_EPON_CPU = "show cpu-usage"
+CMD_EPON_MEMORY = "show memory"
+
+# Jumlah maksimum port EPON pada chassis (CLI: EPON port id <1-8>).
+EPON_PON_PORT_MAX = 8
+
+
+def cmd_epon_onu_info(port: int) -> str:
+    """Daftar ONU + status untuk satu port EPON."""
+    return f"show onu-info {port} all"
+
+
+def cmd_epon_optical(port: int) -> str:
+    """Diagnosa optik (Tx/Rx dBm) untuk satu port EPON."""
+    return f"show optical-diag {port}"
+
+
+# --------------------------------------------------------------------------
 # OID SNMP
 # --------------------------------------------------------------------------
 

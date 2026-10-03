@@ -7,7 +7,8 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
-import { fetchOLTList } from '@/lib/api';
+import { fetchOLTList, fetchOLTDetail } from '@/lib/api';
+import { OLTEditModal } from '@/components/olt/OLTEditModal';
 import {
     cn,
     timeAgo,
@@ -34,7 +35,7 @@ function totalTraffic(olt: OLTSummary): number {
 }
 
 export default function OLTInventoryPage() {
-    const { isAuthenticated, hydrate } = useAuthStore();
+    const { isAuthenticated, hydrate, user } = useAuthStore();
     const { t } = useTranslation();
     const router = useRouter();
 
@@ -45,6 +46,9 @@ export default function OLTInventoryPage() {
     const [vendorFilter, setVendorFilter] = useState<string>(VENDOR_ALL);
     const [groupFilter, setGroupFilter] = useState<string>(OLT_GROUP_ALL);
     const [sortKey, setSortKey] = useState<SortKey>('status');
+    const [editTarget, setEditTarget] = useState<import('@/lib/mock-data').OLTDetail | null>(null);
+    const [showEdit, setShowEdit] = useState(false);
+    const [loadingEdit, setLoadingEdit] = useState<string | null>(null);
 
     useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -63,6 +67,27 @@ export default function OLTInventoryPage() {
 
         loadData();
     }, [isAuthenticated, router]);
+
+    const openEdit = async (olt: import('@/lib/mock-data').OLTSummary) => {
+        setLoadingEdit(olt.id);
+        try {
+            const detail = await fetchOLTDetail(olt.id);
+            setEditTarget(detail);
+            setShowEdit(true);
+        } catch (e) {
+            console.error('Failed to load OLT detail for edit:', e);
+        } finally {
+            setLoadingEdit(null);
+        }
+    };
+
+    const reloadOLTs = async () => {
+        try {
+            setOlts(await fetchOLTList());
+        } catch (e) {
+            console.error('Failed to reload OLT list:', e);
+        }
+    };
 
     // Vendor list is derived, not hardcoded — a new vendor shows up in the filter
     // the moment the first device of that brand is provisioned.
@@ -459,9 +484,16 @@ export default function OLTInventoryPage() {
                                             </td>
                                             <td className="font-mono text-xs text-text-muted">{timeAgo(olt.last_poll)}</td>
                                             <td className="text-right">
-                                                <Link href={`/olt/${olt.id}`} className="btn-ghost px-2.5 py-1 text-xs text-noc-cyan">
-                                                    {t.btnDetail} →
-                                                </Link>
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <Link href={`/olt/${olt.id}`} className="btn-ghost px-2.5 py-1 text-xs text-noc-cyan">
+                                                        {t.btnDetail} →
+                                                    </Link>
+                                                    {user?.role === 'admin' && (
+                                                        <button type="button" onClick={() => openEdit(olt)} disabled={loadingEdit === olt.id} className="btn-ghost px-2 py-1 text-xs disabled:opacity-50" title={t.editOlt}>
+                                                            {loadingEdit === olt.id ? '…' : t.editOlt}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -471,6 +503,9 @@ export default function OLTInventoryPage() {
                     )}
                 </div>
             </div>
+            {showEdit && editTarget && (
+                <OLTEditModal olt={editTarget} onClose={() => { setShowEdit(false); }} onUpdated={() => { setShowEdit(false); setEditTarget(null); reloadOLTs(); }} onDeleted={() => { setShowEdit(false); setEditTarget(null); reloadOLTs(); }} />
+            )}
         </MainLayout>
     );
 }

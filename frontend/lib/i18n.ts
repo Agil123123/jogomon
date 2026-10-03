@@ -253,6 +253,21 @@ export interface Translations {
   metricRamSubtitle: string;
   metricTempSubtitle: string;
 
+  // OLT edit / delete
+  editOlt: string;
+  deleteOlt: string;
+  editOltTitle: string;
+  deleteOltTitle: string;
+  deleteOltConfirm: string;
+  deleteOltWarning: string;
+  cancel: string;
+  confirmDelete: string;
+  deleting: string;
+  oltUpdated: string;
+  oltDeleted: string;
+  sshPasswordKeepHint: string;
+  snmpCommunityKeepHint: string;
+
   // Accessibility landmarks & assistive labels
   skipToContent: string;
   landmarkMainNav: string;
@@ -529,6 +544,20 @@ const idTranslations: Translations = {
   metricRamSubtitle: 'Memori sistem',
   metricTempSubtitle: 'Sensor board',
 
+  editOlt: 'Ubah',
+  deleteOlt: 'Hapus',
+  editOltTitle: 'Ubah OLT',
+  deleteOltTitle: 'Hapus OLT',
+  deleteOltConfirm: 'Ketik nama OLT untuk konfirmasi',
+  deleteOltWarning: 'Tindakan ini permanen. Semua PON, ONU, riwayat optik, dan alarm milik OLT ini akan ikut terhapus.',
+  cancel: 'Batal',
+  confirmDelete: 'Hapus permanen',
+  deleting: 'Menghapus…',
+  oltUpdated: 'OLT berhasil diperbarui',
+  oltDeleted: 'OLT berhasil dihapus',
+  sshPasswordKeepHint: 'Kosongkan untuk mempertahankan password lama',
+  snmpCommunityKeepHint: 'Kosongkan untuk mempertahankan community lama',
+
   // Accessibility landmarks & assistive labels
   skipToContent: 'Lompat ke konten utama',
   landmarkMainNav: 'Navigasi utama',
@@ -804,6 +833,20 @@ const enTranslations: Translations = {
   metricCpuSubtitle: 'Chassis core',
   metricRamSubtitle: 'System RAM',
   metricTempSubtitle: 'Board sensor',
+
+  editOlt: 'Edit',
+  deleteOlt: 'Delete',
+  editOltTitle: 'Edit OLT',
+  deleteOltTitle: 'Delete OLT',
+  deleteOltConfirm: 'Type the OLT name to confirm',
+  deleteOltWarning: 'This action is permanent. All PONs, ONUs, optical history, and alarms belonging to this OLT will be deleted too.',
+  cancel: 'Cancel',
+  confirmDelete: 'Delete permanently',
+  deleting: 'Deleting…',
+  oltUpdated: 'OLT updated successfully',
+  oltDeleted: 'OLT deleted successfully',
+  sshPasswordKeepHint: 'Leave blank to keep current password',
+  snmpCommunityKeepHint: 'Leave blank to keep current community',
 
   // Accessibility landmarks & assistive labels
   skipToContent: 'Skip to main content',

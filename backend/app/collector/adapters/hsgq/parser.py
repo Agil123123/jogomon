@@ -410,6 +410,115 @@ def assemble_pons(
 
 
 # --------------------------------------------------------------------------
+# Dialek EPON (HSGQ-E04MID varian EPON)
+# --------------------------------------------------------------------------
+#
+# CLI EPON memakai kunci dua tingkat `port/onu` (mis. "1/1", "1/28"), bukan
+# `slot/port:onu` gaya GPON. Semua ONU EPON dipetakan ke slot 0 supaya cocok
+# dengan model (slot, port). Jadi PON EPON port N → PONData(slot=0, port=N).
+
+# Kunci ONU EPON di awal baris: "1/1", " 1/28". Angka pertama = port,
+# kedua = onu id. Dibatasi di awal baris supaya tidak salah tangkap angka lain.
+_EPON_ONU_KEY_RE = re.compile(r"^\s*(\d{1,2})\s*/\s*(\d{1,3})\b")
+# Baris ringkasan port di `show pon-info`: "PON01   Up   25/27".
+_EPON_PON_ROW_RE = re.compile(
+    r"^\s*PON\s*0*(\d{1,2})\s+(\S+)\s+(\d+)\s*/\s*(\d+)", re.IGNORECASE
+)
+
+
+def parse_epon_pon_info(text: str) -> dict[int, PortStatus]:
+    """Peta port EPON → PortStatus dari `show pon-info`.
+
+    Baris data berbentuk "PON01   Up   25/27" (port, status, online/total).
+    Hanya status port yang diambil di sini; jumlah ONU dihitung ulang dari
+    daftar ONU sebenarnya di `parse_epon_onu_info`.
+    """
+    result: dict[int, PortStatus] = {}
+    for line in text.splitlines():
+        m = _EPON_PON_ROW_RE.match(line)
+        if not m:
+            continue
+        port = int(m.group(1))
+        result[port] = map_pon_status(m.group(2))
+    return result
+
+
+def parse_epon_onu_info(port: int, text: str) -> dict[int, ONUData]:
+    """Peta onu_id → ONUData dari `show onu-info <port> all`.
+
+    Kolom (fixed-width, dari header):
+        PON/ONU  Mac-Address  Status  Auth  Cfg  Reg-time  ONU-Name  ONU-Desc
+    Status "Online"/"Offline"/"Initial" dipetakan lewat ONU_STATE_MAP.
+    """
+    result: dict[int, ONUData] = {}
+    lines = _clean_lines(text)
+    table = _find_table(lines, "pon", "onu", "status")
+    for line in lines:
+        m = _EPON_ONU_KEY_RE.match(line)
+        if not m or int(m.group(1)) != port:
+            continue
+        onu_id = int(m.group(2))
+
+        mac = _mac_address(line)
+        status = DeviceStatus.UNKNOWN
+        name: str | None = None
+        if table is not None:
+            status_cell = table[0].cell_alias(line, "status", "state")
+            name_cell = table[0].cell_alias(line, "onuname", "name")
+            if status_cell:
+                status = map_onu_status(status_cell)
+            if name_cell and name_cell.upper() not in {"NO-DESCRIPTION", "NO-DESCRIPTI"}:
+                name = name_cell.strip() or None
+        if status is DeviceStatus.UNKNOWN:
+            token = _status_token(line, ONU_STATE_MAP)
+            if token:
+                status = map_onu_status(token)
+
+        result[onu_id] = ONUData(
+            onu_id=onu_id,
+            serial_number=mac,
+            name=name,
+            status=status,
+        )
+    return result
+
+
+def parse_epon_optical(port: int, text: str) -> dict[int, OpticalReading]:
+    """Peta onu_id → OpticalReading dari `show optical-diag <port>`.
+
+    Kolom: PON/ONU  ONU-Name  Mac-address  Temperature  Voltage  Bias
+           Tx power  Rx power. Tx/Rx dalam dBm.
+
+    Irisan fixed-width tidak dipakai di sini karena batas kolom bisa memotong
+    tanda minus nilai Rx (mis. "-20.1773" → "0.1773"). Sebagai gantinya semua
+    float dalam rentang dBm diambil; dua terakhir pada baris adalah (tx, rx)
+    — Tx power positif (~+2 dBm) selalu mendahului Rx power negatif.
+    """
+    result: dict[int, OpticalReading] = {}
+    for line in _clean_lines(text):
+        m = _EPON_ONU_KEY_RE.match(line)
+        if not m or int(m.group(1)) != port:
+            continue
+        onu_id = int(m.group(2))
+
+        floats = [
+            f
+            for f in map(float, _FLOAT_RE.findall(line))
+            if _OPTICAL_MIN <= f <= _OPTICAL_MAX
+        ]
+        tx = rx = None
+        if len(floats) >= 2:
+            tx, rx = floats[-2], floats[-1]
+        result[onu_id] = OpticalReading(rx=rx, tx=tx)
+    return result
+
+
+def _mac_address(line: str) -> str | None:
+    m = re.search(r"\b([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\b", line)
+    return m.group(1).lower() if m else None
+
+
+# --------------------------------------------------------------------------
 # Uplink
 # --------------------------------------------------------------------------
 
@@ -485,4 +594,7 @@ __all__ = [
     "merge_onu_optical",
     "assemble_pons",
     "parse_uplink",
+    "parse_epon_pon_info",
+    "parse_epon_onu_info",
+    "parse_epon_optical",
 ]

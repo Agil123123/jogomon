@@ -200,6 +200,23 @@ export async function createOLT(data: Record<string, unknown>): Promise<OLTSumma
   return apiFetch('/olts', { method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function updateOLT(id: string, data: Record<string, unknown>): Promise<OLTSummary> {
+  if (USE_MOCK) {
+    await new Promise(r => setTimeout(r, 300));
+    const olt = getMockOLTs().find(o => o.id === id);
+    return { ...(olt as OLTSummary), ...(data as Partial<OLTSummary>) };
+  }
+  return apiFetch(`/olts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export async function deleteOLT(id: string): Promise<{ message: string }> {
+  if (USE_MOCK) {
+    await new Promise(r => setTimeout(r, 300));
+    return { message: 'OLT dihapus' };
+  }
+  return apiFetch(`/olts/${id}`, { method: 'DELETE' });
+}
+
 // --- Telegram Notifications ---
 export async function fetchTelegramConfig(): Promise<TelegramConfig> {
   if (USE_MOCK) return mockTelegramConfig;

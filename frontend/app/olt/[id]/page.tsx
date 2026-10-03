@@ -9,6 +9,7 @@ import { PONTrafficBreakdown } from '@/components/olt/PONTrafficBreakdown';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { fetchOLTDetail, fetchPONONUs } from '@/lib/api';
+import { OLTEditModal } from '@/components/olt/OLTEditModal';
 import {
   cn, formatDbm, formatPercent, formatTemp, formatUptime, formatTraffic,
   timeAgo, getBeaconClass, classifyRxPower, getRxColor,
@@ -18,7 +19,7 @@ import type { OLTDetail, ONUDetail } from '@/lib/mock-data';
 export default function OLTDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isAuthenticated, hydrate } = useAuthStore();
+  const { isAuthenticated, hydrate, user } = useAuthStore();
   const { t } = useTranslation();
 
   const [olt, setOlt] = useState<OLTDetail | null>(null);
@@ -26,6 +27,7 @@ export default function OLTDetailPage() {
   const [expandedPon, setExpandedPon] = useState<string | null>(null);
   const [onus, setOnus] = useState<Record<string, ONUDetail[]>>({});
   const [loadingOnus, setLoadingOnus] = useState<string | null>(null);
+  const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -39,6 +41,20 @@ export default function OLTDetailPage() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [isAuthenticated, router, params.id]);
+
+  const reloadDetail = async () => {
+    const oltId = params.id as string;
+    if (!oltId) return;
+    try {
+      const data = await fetchOLTDetail(oltId);
+      setOlt(data);
+      // ONU cache bisa basi setelah edit; reset supaya di-fetch ulang saat expand.
+      setOnus({});
+      setExpandedPon(null);
+    } catch (error) {
+      console.error('Failed to reload OLT detail:', error);
+    }
+  };
 
   const togglePon = async (ponId: string) => {
     if (expandedPon === ponId) {
@@ -127,6 +143,11 @@ export default function OLTDetailPage() {
             <span className="font-mono text-xs text-text-muted bg-surface-2 px-3 py-1 rounded-md border border-white/[0.06]">
               {t.colLastPoll}: <span className="text-text-secondary">{timeAgo(olt.last_poll)}</span>
             </span>
+            {user?.role === 'admin' && (
+              <button onClick={() => setShowEdit(true)} className="btn-secondary !h-8 !px-4" title={t.editOlt}>
+                {t.editOlt}
+              </button>
+            )}
           </div>
         </div>
 
@@ -364,6 +385,15 @@ export default function OLTDetailPage() {
           </div>
         </div>
       </div>
+
+      {showEdit && olt && (
+        <OLTEditModal
+          olt={olt}
+          onClose={() => setShowEdit(false)}
+          onUpdated={() => { setShowEdit(false); reloadDetail(); }}
+          onDeleted={() => { setShowEdit(false); router.push('/'); }}
+        />
+      )}
     </MainLayout>
   );
 }

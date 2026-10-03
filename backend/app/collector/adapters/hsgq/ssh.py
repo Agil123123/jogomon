@@ -24,8 +24,8 @@ import paramiko
 
 from app.collector.adapters.hsgq import e04mid as k
 from app.collector.adapters.hsgq import parser
-from app.collector.base import CollectorError, OLTSnapshot
-from app.models import OLT, PollingProtocol
+from app.collector.base import CollectorError, OLTSnapshot, ONUData, PONData
+from app.models import OLT, DeviceStatus, PollingProtocol, PortStatus
 from app.services.crypto import decrypt
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,11 @@ _BANNER_DEADLINE = 8.0
 _SETUP_WAIT = 4.0
 # Diam selama _IDLE_TIMEOUT detik setelah byte terakhir = perintah selesai.
 _IDLE_TIMEOUT = 1.5
+# Idle lebih longgar untuk perintah EPON per-port: firmware EPON meng-echo
+# perintah lebih dulu, lalu berpikir ~1.8s (port padat 60+ ONU) sebelum
+# mengirim blok data. Dengan idle 1.5s pembacaan bisa putus di tengah jeda itu
+# dan hanya menangkap baris echo. Beri margin supaya blok data sempat datang.
+_EPON_CMD_IDLE = 3.0
 # Batas keras per perintah (safety net kalau ada yang menggantung).
 _MAX_CMD_WAIT = 25.0
 _POLL_INTERVAL = 0.05
@@ -118,21 +123,112 @@ class HSGQSshCollector:
                 self._run(chan, cmd, wait=_SETUP_WAIT)
 
             outputs = {cmd: self._run(chan, cmd) for cmd in k.COLLECT_COMMANDS}
+            snap = self._build_snapshot(outputs)
+
+            # Fallback dialek EPON: firmware EPON menolak perintah `show` global
+            # GPON, jadi jalur di atas tidak menemukan ONU (kadang malah memicu
+            # PON hantu dari teks error). Pemicunya jumlah ONU, bukan sekadar
+            # ada/tidaknya PON.
+            if snap.onu_count == 0:
+                epon = self._collect_epon(chan)
+                if epon.onu_count:
+                    snap = epon
 
             try:
                 chan.close()
             except Exception:  # noqa: BLE001
                 pass
-            return self._build_snapshot(outputs)
+            return snap
         finally:
             client.close()
 
-    def _run(self, chan: paramiko.Channel, command: str, *, wait: float = _MAX_CMD_WAIT) -> str:
+    def _collect_epon(self, chan: paramiko.Channel) -> OLTSnapshot:
+        """Kumpulkan snapshot lewat dialek EPON HSGQ.
+
+        Masuk privileged+config mode, baca ringkasan port (`show pon-info`),
+        lalu untuk tiap port aktif ambil daftar ONU + diagnosa optik.
+        """
+        for cmd in k.CMD_EPON_ENTER:
+            self._run(chan, cmd, wait=_SETUP_WAIT)
+        for cmd in k.CMD_DISABLE_PAGING:
+            self._run(chan, cmd, wait=_SETUP_WAIT)
+
+        pon_info_raw = self._run(chan, k.CMD_EPON_PON_INFO)
+        pon_states = parser.parse_epon_pon_info(pon_info_raw)
+
+        snap = OLTSnapshot(protocol=self.protocol, reachable=True)
+        version_raw = self._run(chan, k.CMD_EPON_VERSION)
+        snap.firmware = parser.parse_firmware(version_raw)
+        snap.uptime = parser.parse_uptime_seconds(version_raw)
+        cpu, mem = parser.parse_cpu_memory(
+            "\n".join(
+                (
+                    self._run(chan, k.CMD_EPON_CPU),
+                    self._run(chan, k.CMD_EPON_MEMORY),
+                    version_raw,
+                )
+            )
+        )
+        snap.cpu_usage = cpu
+        snap.memory_usage = mem
+
+        # Port yang perlu di-scan: yang muncul di ringkasan; kalau ringkasan
+        # kosong, coba seluruh rentang port EPON.
+        ports = sorted(pon_states) or list(range(1, k.EPON_PON_PORT_MAX + 1))
+        for port in ports:
+            onu_raw = self._run(chan, k.cmd_epon_onu_info(port), idle=_EPON_CMD_IDLE)
+            onus = parser.parse_epon_onu_info(port, onu_raw)
+            if not onus and port not in pon_states:
+                continue
+            optical_raw = self._run(chan, k.cmd_epon_optical(port), idle=_EPON_CMD_IDLE)
+            optical = parser.parse_epon_optical(port, optical_raw)
+            for onu_id, reading in optical.items():
+                onu = onus.get(onu_id)
+                if onu is None:
+                    onu = ONUData(onu_id=onu_id, status=DeviceStatus.UNKNOWN)
+                    onus[onu_id] = onu
+                if reading.rx is not None:
+                    onu.rx_power = reading.rx
+                if reading.tx is not None:
+                    onu.tx_power = reading.tx
+
+            status = pon_states.get(port)
+            if status is None:
+                status = (
+                    PortStatus.ONLINE
+                    if any(o.status is DeviceStatus.ONLINE for o in onus.values())
+                    else PortStatus.OFFLINE
+                )
+            snap.pons.append(
+                PONData(
+                    slot=0,
+                    port=port,
+                    status=status,
+                    onus=[onus[i] for i in sorted(onus)],
+                )
+            )
+
+        logger.info(
+            "SSH poll %s (EPON): %d PON, %d ONU",
+            self._name,
+            len(snap.pons),
+            snap.onu_count,
+        )
+        return snap
+
+    def _run(
+        self,
+        chan: paramiko.Channel,
+        command: str,
+        *,
+        wait: float = _MAX_CMD_WAIT,
+        idle: float = _IDLE_TIMEOUT,
+    ) -> str:
         try:
             chan.sendall(command + "\n")
         except OSError as exc:
             raise CollectorError(f"{self._name}: koneksi SSH putus saat kirim perintah") from exc
-        raw = self._read(chan, _IDLE_TIMEOUT, deadline=wait)
+        raw = self._read(chan, idle, deadline=wait)
         return _clean_output(raw, command)
 
     def _read(self, chan: paramiko.Channel, idle: float, *, deadline: float) -> str:
