@@ -92,12 +92,28 @@ jobs:
 
             echo "=== Backend: install + migrate ==="
             cd /opt/jogomon/backend
+            # pip ada di /opt/jogomon/backend/.venv/bin/pip (PATH tidak ikut sudo -u)
             if [ "$SUDO" = "sudo" ]; then
-              sudo -u jogomon .venv/bin/pip install -r requirements.txt
-              sudo -u jogomon .venv/bin/alembic upgrade head || true
+              if [ -x /opt/jogomon/backend/.venv/bin/pip ]; then
+                sudo -u jogomon /opt/jogomon/backend/.venv/bin/pip install -r requirements.txt
+                sudo -u jogomon /opt/jogomon/backend/.venv/bin/alembic upgrade head || true
+              else
+                echo "venv belum ada, bikin dulu..."
+                sudo -u jogomon python3 -m venv /opt/jogomon/backend/.venv
+                sudo -u jogomon /opt/jogomon/backend/.venv/bin/pip install --upgrade pip
+                sudo -u jogomon /opt/jogomon/backend/.venv/bin/pip install -r requirements.txt
+                sudo -u jogomon /opt/jogomon/backend/.venv/bin/alembic upgrade head || true
+              fi
             else
-              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon .venv/bin/pip install -r requirements.txt
-              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon .venv/bin/alembic upgrade head || true
+              if printf '%s\n' "$VPS_PASSWORD" | sudo -S test -x /opt/jogomon/backend/.venv/bin/pip; then
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon /opt/jogomon/backend/.venv/bin/pip install -r requirements.txt
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon /opt/jogomon/backend/.venv/bin/alembic upgrade head || true
+              else
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon python3 -m venv /opt/jogomon/backend/.venv
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon /opt/jogomon/backend/.venv/bin/pip install --upgrade pip
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon /opt/jogomon/backend/.venv/bin/pip install -r requirements.txt
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon /opt/jogomon/backend/.venv/bin/alembic upgrade head || true
+              fi
             fi
 
             echo "=== Frontend: install + build ==="
