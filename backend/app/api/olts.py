@@ -24,6 +24,7 @@ from app.models import (
     OLT,
     ONUOpticalHistory,
     PON,
+    TrafficHistory,
     UplinkPort,
 )
 from app.schemas import (
@@ -35,6 +36,7 @@ from app.schemas import (
     OLTSummaryOut,
     OLTUpdate,
     PONDetailOut,
+    TrafficHistoryPointOut,
 )
 from app.services.auth import AdminUser, CurrentUser
 from app.services.crypto import encrypt
@@ -219,7 +221,24 @@ async def get_olt(olt_id: uuid.UUID, db: DB, _: CurrentUser) -> OLTDetailOut:
             }
             for u in uplinks
         ],
-        traffic_history=[],
+        traffic_history=[
+            TrafficHistoryPointOut(
+                time=row.timestamp.strftime("%H:%M"),
+                traffic_in_gbps=round(float(row.traffic_in_mbps) / 1000, 3),
+                traffic_out_gbps=round(float(row.traffic_out_mbps) / 1000, 3),
+                total_gbps=round(float(row.traffic_in_mbps + row.traffic_out_mbps) / 1000, 3),
+            )
+            for row in (
+                await db.execute(
+                    select(TrafficHistory)
+                    .where(TrafficHistory.olt_id == olt_id)
+                    .order_by(TrafficHistory.timestamp.desc())
+                    .limit(60)
+                )
+            )
+            .scalars()
+            .all()[::-1]
+        ],
         pons=[_pon_out(p) for p in pons],
     )
 

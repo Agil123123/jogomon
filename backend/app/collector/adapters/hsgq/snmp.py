@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import re
 
 try:  # pysnmp 6.x (pinned 6.2.6)
@@ -55,6 +56,7 @@ logger = logging.getLogger(__name__)
 _TOTAL_BUDGET = 45.0
 # Jaring pengaman anti-loop kalau agen SNMP tak pernah keluar subtree.
 _WALK_MAX_ROWS = 1024
+_PREV_COUNTERS: dict[tuple[str, str, str], tuple[int, float]] = {}
 
 # Interface virtual/manajemen yang bukan uplink. `\b` mencegah "lo" ketangkap
 # di dalam "slot"/"flow" dan sejenisnya (bug substring klasik).
@@ -220,7 +222,31 @@ class HSGQSnmpCollector:
             idx: _to_int(val)
             for idx, val in await self._walk(engine, community, target, context, k.OID_IF_HIGH_SPEED)
         }
-
+        hc_in = {
+            idx: _to_int(val)
+            for idx, val in await self._walk(engine, community, target, context, k.OID_IF_HC_IN_OCTETS)
+        }
+        hc_out = {
+            idx: _to_int(val)
+            for idx, val in await self._walk(engine, community, target, context, k.OID_IF_HC_OUT_OCTETS)
+        }
+        now = time.monotonic()
+        def _rate(cur, key, ifname):
+            if cur is None:
+                return 0.0
+            ck = (self._host, ifname, key)
+            prev = _PREV_COUNTERS.get(ck)
+            _PREV_COUNTERS[ck] = (cur, now)
+            if prev is None:
+                return 0.0
+            pv, pts = prev
+            ds = now - pts
+            if ds <= 0 or ds > 600:
+                return 0.0
+            d = cur - pv
+            if d < 0:
+                d += 1 << 64
+            return round(d * 8 / ds / 1_000_000, 3)
         uplinks: list[UplinkData] = []
         for idx, name in sorted(names.items()):
             if not name or not _is_uplink(name, speed.get(idx)):
@@ -232,10 +258,8 @@ class HSGQSnmpCollector:
                     type=_uplink_type(mbps),
                     status=k.IF_OPER_STATUS_MAP.get(oper.get(idx, 0), PortStatus.OFFLINE),
                     speed_gbps=round(mbps / 1000, 3) if mbps else 1.0,
-                    # Rate butuh dua sampel counter; dihitung di layer persist,
-                    # bukan dari satu snapshot. Sisakan 0 di sini.
-                    traffic_in_mbps=0.0,
-                    traffic_out_mbps=0.0,
+                    traffic_in_mbps=_rate(hc_in.get(idx), "in", name),
+                    traffic_out_mbps=_rate(hc_out.get(idx), "out", name),
                 )
             )
         return uplinks

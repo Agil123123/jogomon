@@ -348,11 +348,11 @@ export default function OLTDetailPage() {
                         <span className="ml-auto font-mono text-[0.68rem] text-text-muted">{(() => { const q=(onuQuery[pon.id]||'').toLowerCase(); const f=onuStatus[pon.id]||'all'; const list=onus[pon.id]||[]; const fl=list.filter(o=>{ const ms=f==='all'||o.status===f; const hay=((o.name||'')+' '+o.serial_number+' '+o.onu_id).toLowerCase(); const mq=!q||hay.includes(q); return ms&&mq; }); return `${fl.length}/${list.length}`; })()} ONU</span>
                       </div>
                       <div className="overflow-x-auto overscroll-x-contain -mx-2 px-2">
-                        <table className="noc-table min-w-[880px]">
+                        <table className="noc-table min-w-[960px]">
                           <thead>
                             <tr>
                               <th className="!bg-surface-dim w-12">ID</th>
-                              <th className="!bg-surface-dim min-w-[220px]">{t.colOnuName}</th>
+                              <th className="!bg-surface-dim min-w-[260px] max-w-[360px]">{t.colOnuName}</th>
                               <th className="!bg-surface-dim">{t.colStatus}</th>
                               <th className="!bg-surface-dim">{t.colRxPower}</th>
                               <th className="!bg-surface-dim">{t.colTxPower}</th>
@@ -374,11 +374,11 @@ export default function OLTDetailPage() {
                               return (
                                 <tr key={onu.id}>
                                   <td className="text-text-primary font-semibold font-mono text-xs">{onu.onu_id}</td>
-                                  <td className="min-w-[220px]">
+                                  <td className="min-w-[260px] max-w-[360px]">
                                     <div className="flex flex-col gap-0.5">
-                                      <span className={cn('font-medium text-[0.78rem] leading-tight truncate max-w-[220px]', onu.name ? 'text-text-primary' : 'text-text-muted italic')} title={onu.name || ''}>{onu.name || '— tanpa nama'}</span>
+                                      <span className={cn('font-medium text-[0.78rem] leading-tight break-words whitespace-normal', onu.name ? 'text-text-primary' : 'text-text-muted italic')} title={onu.name || ''}>{onu.name || '— tanpa nama'}</span>
                                       <span className="flex items-center gap-1.5">
-                                        <span className="font-mono text-[0.68rem] text-text-secondary truncate max-w-[160px]" title={onu.serial_number || ''}>{onu.serial_number || '—'}</span>
+                                        <span className="font-mono text-[0.68rem] text-text-secondary break-all whitespace-normal" title={onu.serial_number || ''}>{onu.serial_number || '—'}</span>
                                         {onu.serial_number && (<button onClick={()=> copySerial(onu.serial_number!)} className="shrink-0 p-0.5 rounded hover:bg-white/10 text-text-muted hover:text-noc-cyan transition-colors" title="Salin serial" aria-label="Salin serial"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v3"/></svg></button>)}
                                       </span>
                                     </div>
