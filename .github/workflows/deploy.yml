@@ -47,20 +47,24 @@ jobs:
               exit 1
             fi
 
-            echo "=== Pull latest ==="
-            sudo chown -R root:root /opt/jogomon/.git 2>/dev/null || true
+            echo "=== Pull latest (fix FETCH_HEAD permission) ==="
+            # FIX: chown dulu ke jogomon SEBELUM git, lalu jalankan git sebagai jogomon
+            # sebelumnya .git/FETCH_HEAD milik root -> jogomon tidak bisa tulis -> Permission denied
+            sudo chown -R jogomon:jogomon /opt/jogomon
+            sudo chmod -R u+w /opt/jogomon/.git 2>/dev/null || true
             cd /opt/jogomon
-            if ! sudo git fetch origin main 2>&1; then
+            if ! sudo -u jogomon git fetch origin main 2>&1; then
               echo "git fetch gagal, re-clone..."
               cd /opt
               sudo rm -rf jogomon.bak || true
               sudo mv jogomon jogomon.bak || true
               sudo git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
               sudo cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
+              sudo chown -R jogomon:jogomon /opt/jogomon
             else
-              sudo git reset --hard origin/main
+              sudo -u jogomon git reset --hard origin/main
+              sudo chown -R jogomon:jogomon /opt/jogomon
             fi
-            sudo chown -R jogomon:jogomon /opt/jogomon
             sudo -u jogomon git -C /opt/jogomon log --oneline -3 || git -C /opt/jogomon log --oneline -3 || true
 
             echo "=== Backend: install + migrate ==="
