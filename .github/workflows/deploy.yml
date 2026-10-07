@@ -39,8 +39,10 @@ jobs:
             echo "=== Who am I ==="
             whoami; id; sudo -n true && echo "sudo NOPASSWD ok" || echo "sudo perlu password (pakai -S)"
 
-            # helper: pakai password dari secrets biar sudo jalan meski belum NOPASSWD
-            SUDO_PASS='${{ secrets.VPS_PASSWORD }}'
+            # helper: pakai password dari env (aman dari karakter '!$#) biar sudo jalan meski belum NOPASSWD
+            # appleboy inject VPS_PASSWORD sebagai env di remote shell otomatis
+            SUDO_PASS="$VPS_PASSWORD"
+            export SUDO_PASS
             # cache sudo biar next sudo ga minta lagi (5 menit)
             printf '%s\n' "$SUDO_PASS" | sudo -S true 2>/dev/null || true
 
