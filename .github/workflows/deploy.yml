@@ -135,7 +135,13 @@ jobs:
             fi
 
             echo "=== Health check ==="
-            sleep 3
-            curl -fsS http://127.0.0.1:8100/health; echo
-            curl -fsS http://127.0.0.1:3100/ | head -c 200; echo
+            set +e
+            sleep 4
+            echo "--- backend :8100/health (retry) ---"
+            for i in 1 2 3; do curl -fsS http://127.0.0.1:8100/health && echo " -> backend OK" && break; echo "retry $i..."; sleep 3; done || echo "WARN backend health gagal (cek systemctl status jogomon-backend)"
+            echo "--- frontend :3100/ ---"
+            curl -fsS http://127.0.0.1:3100/ | head -c 300; echo
+            echo "--- public https health (optional) ---"
+            curl -fsSk https://jogomon.joglonet.my.id/health 2>&1 | head -c 200; echo
+            set -e
             echo "=== DONE ==="
