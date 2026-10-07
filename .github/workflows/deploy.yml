@@ -37,9 +37,18 @@ jobs:
           script: |
             set -e
             echo "=== Pull latest ==="
+            # /opt/jogomon dulunya di-clone sebagai jogomon:jogomon, jadi root gabisa nulis FETCH_HEAD
+            chown -R root:root /opt/jogomon/.git 2>/dev/null || true
             cd /opt/jogomon
-            git fetch origin main
-            git reset --hard origin/main
+            # fallback kalau .git kepemilikan berantakan: re-clone
+            if ! git fetch origin main 2>&1; then
+              echo "git fetch gagal, re-clone..."
+              cd /opt
+              rm -rf jogomon.bak && mv jogomon jogomon.bak || true
+              git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
+            else
+              git reset --hard origin/main
+            fi
             chown -R jogomon:jogomon /opt/jogomon
 
             echo "=== Backend: install + migrate ==="
