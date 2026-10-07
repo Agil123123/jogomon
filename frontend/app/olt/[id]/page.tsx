@@ -16,10 +16,15 @@ import {
 } from '@/lib/utils';
 import type { OLTDetail, ONUDetail } from '@/lib/mock-data';
 
+function copySerial(text: string) {
+  if (!text) return;
+  navigator.clipboard.writeText(text).catch(()=>{});
+}
+
 export default function OLTDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isAuthenticated, hydrate, user } = useAuthStore();
+  const { isAuthenticated, hasHydrated, hydrate, user } = useAuthStore();
   const { t } = useTranslation();
 
   const [olt, setOlt] = useState<OLTDetail | null>(null);
@@ -28,10 +33,13 @@ export default function OLTDetailPage() {
   const [onus, setOnus] = useState<Record<string, ONUDetail[]>>({});
   const [loadingOnus, setLoadingOnus] = useState<string | null>(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [onuQuery, setOnuQuery] = useState<Record<string,string>>({});
+  const [onuStatus, setOnuStatus] = useState<Record<string,'all'|'online'|'offline'>>({});
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     const oltId = params.id as string;
     if (!oltId) return;
@@ -40,7 +48,7 @@ export default function OLTDetailPage() {
       setOlt(data);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [isAuthenticated, router, params.id]);
+  }, [isAuthenticated, hasHydrated, router, params.id]);
 
   const reloadDetail = async () => {
     const oltId = params.id as string;
@@ -74,6 +82,15 @@ export default function OLTDetailPage() {
     }
   };
 
+  if (!hasHydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-full min-h-[60vh]">
+          <div className="w-8 h-8 border-2 border-noc-cyan/30 border-t-noc-cyan rounded-full animate-spin" />
+        </div>
+      </MainLayout>
+    );
+  }
   if (!isAuthenticated) return null;
 
   if (loading) {
@@ -316,12 +333,26 @@ export default function OLTDetailPage() {
                         <div className="w-5 h-5 border-2 border-noc-cyan/30 border-t-noc-cyan rounded-full animate-spin" />
                       </div>
                     ) : onus[pon.id] && onus[pon.id].length > 0 ? (
-                      <div className="overflow-x-auto">
-                        <table className="noc-table">
+                      <>
+                      {/* ONU filter bar - A+C polish */}
+                      <div className="flex flex-wrap items-center gap-2 px-1 pb-2">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                          <input value={onuQuery[pon.id] || '' } onChange={(e)=> setOnuQuery(prev=> ({...prev, [pon.id]: e.target.value}))} placeholder={t.colOnuName + ' / ' + t.colSerial + '...'} className="noc-input !h-7 !py-1 !text-xs flex-1 min-w-0" />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {(['all','online','offline'] as const).map(s=> (
+                            <button key={s} onClick={()=> setOnuStatus(prev=> ({...prev, [pon.id]: s}))} className={cn('filter-chip !min-h-0 !py-1 !px-2 text-[0.62rem]', (onuStatus[pon.id]||'all')===s && 'filter-chip-active')}>{s==='all' ? 'Semua' : s==='online' ? t.online : t.offline}</button>
+                          ))}
+                        </div>
+                        <span className="ml-auto font-mono text-[0.68rem] text-text-muted">{(() => { const q=(onuQuery[pon.id]||'').toLowerCase(); const f=onuStatus[pon.id]||'all'; const list=onus[pon.id]||[]; const fl=list.filter(o=>{ const ms=f==='all'||o.status===f; const hay=((o.name||'')+' '+o.serial_number+' '+o.onu_id).toLowerCase(); const mq=!q||hay.includes(q); return ms&&mq; }); return `${fl.length}/${list.length}`; })()} ONU</span>
+                      </div>
+                      <div className="overflow-x-auto overscroll-x-contain -mx-2 px-2">
+                        <table className="noc-table min-w-[880px]">
                           <thead>
                             <tr>
-                              <th className="!bg-surface-dim">ID</th>
-                              <th className="!bg-surface-dim">{t.colSerial}</th>
+                              <th className="!bg-surface-dim w-12">ID</th>
+                              <th className="!bg-surface-dim min-w-[220px]">{t.colOnuName}</th>
                               <th className="!bg-surface-dim">{t.colStatus}</th>
                               <th className="!bg-surface-dim">{t.colRxPower}</th>
                               <th className="!bg-surface-dim">{t.colTxPower}</th>
@@ -331,25 +362,29 @@ export default function OLTDetailPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {onus[pon.id].map((onu) => {
+                            {(() => {
+                              const q=(onuQuery[pon.id]||'').toLowerCase();
+                              const st=onuStatus[pon.id]||'all';
+                              const filtered=(onus[pon.id]||[]).filter(o=>{ const ms=st==='all'||o.status===st; const hay=((o.name||'')+' '+(o.serial_number||'')+' '+o.onu_id).toLowerCase(); const mq=!q||hay.includes(q); return ms&&mq; });
+                              if(filtered.length===0) return (<tr><td colSpan={8} className="py-8 text-center"><span className="label-caps text-text-muted">Tidak ada ONU cocok filter</span></td></tr>);
+                              return filtered.map((onu) => {
                               const rxClass = classifyRxPower(onu.rx_power);
                               const rxColor = getRxColor(rxClass);
+                              const rxBadge = rxClass==='normal' ? 'badge-online' : rxClass==='warning' ? 'badge-warning' : rxClass==='critical' || rxClass==='very_critical' ? 'badge-critical' : 'badge-offline';
                               return (
                                 <tr key={onu.id}>
-                                  <td className="text-text-primary font-semibold font-mono">{onu.onu_id}</td>
-                                  <td className="text-text-secondary text-[0.7rem] font-mono">{onu.serial_number}</td>
-                                  <td>
-                                    <span className={cn(
-                                      onu.status === 'online' ? 'badge-online' : 'badge-critical'
-                                    )}>
-                                      {onu.status === 'online' ? t.online : t.offline}
-                                    </span>
+                                  <td className="text-text-primary font-semibold font-mono text-xs">{onu.onu_id}</td>
+                                  <td className="min-w-[220px]">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className={cn('font-medium text-[0.78rem] leading-tight truncate max-w-[220px]', onu.name ? 'text-text-primary' : 'text-text-muted italic')} title={onu.name || ''}>{onu.name || '— tanpa nama'}</span>
+                                      <span className="flex items-center gap-1.5">
+                                        <span className="font-mono text-[0.68rem] text-text-secondary truncate max-w-[160px]" title={onu.serial_number || ''}>{onu.serial_number || '—'}</span>
+                                        {onu.serial_number && (<button onClick={()=> copySerial(onu.serial_number!)} className="shrink-0 p-0.5 rounded hover:bg-white/10 text-text-muted hover:text-noc-cyan transition-colors" title="Salin serial" aria-label="Salin serial"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v3"/></svg></button>)}
+                                      </span>
+                                    </div>
                                   </td>
-                                  <td>
-                                    <span className="font-semibold font-mono" style={{ color: rxColor }}>
-                                      {formatDbm(onu.rx_power)}
-                                    </span>
-                                  </td>
+                                  <td><span className={cn(onu.status === 'online' ? 'badge-online' : 'badge-critical')}>{onu.status === 'online' ? t.online : t.offline}</span></td>
+                                  <td><span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-mono font-semibold', rxBadge)} title={rxClass}><span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background: rxColor}} />{formatDbm(onu.rx_power)}</span></td>
                                   <td className="text-text-secondary font-mono text-xs">{formatDbm(onu.tx_power)}</td>
                                   {/* ONU Traffic */}
                                   <td className="font-mono text-xs">
@@ -363,16 +398,16 @@ export default function OLTDetailPage() {
                                       <span className="text-text-muted">—</span>
                                     )}
                                   </td>
-                                  <td className="text-text-secondary font-mono text-xs">
-                                    {onu.distance !== null ? `${onu.distance} km` : '—'}
-                                  </td>
+                                  <td className="text-text-secondary font-mono text-xs">{onu.distance !== null ? `${onu.distance} m` : '—'}</td>
                                   <td className="text-text-muted font-mono text-xs">{timeAgo(onu.last_seen)}</td>
                                 </tr>
                               );
-                            })}
+                              })
+                            })()}
                           </tbody>
                         </table>
                       </div>
+                      </>
                     ) : (
                       <div className="py-6 text-center">
                         <span className="label-caps text-text-muted">{t.noOnuData}</span>

@@ -196,6 +196,7 @@ class ONUDetailOut(ORMModel):
     # String di kontrak frontend walaupun disimpan integer di DB.
     onu_id: str
     serial_number: str | None = None
+    name: str | None = None
     status: DeviceStatusStr
     rx_power: float | None = None
     tx_power: float | None = None

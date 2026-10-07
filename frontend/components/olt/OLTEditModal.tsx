@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { updateOLT, deleteOLT, fetchOLTGroups } from '@/lib/api';
 import type { OLTDetail } from '@/lib/mock-data';
@@ -35,12 +35,32 @@ export function OLTEditModal({ olt, onClose, onUpdated, onDeleted }: Props) {
   const [confirmName, setConfirmName] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchOLTGroups()
       .then(setKnownGroups)
       .catch((e) => console.error('Failed to load OLT groups:', e));
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key === 'Tab' && modalRef.current) {
+        const els = modalRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        if (!els.length) return;
+        const first = els[0]; const last = els[els.length-1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); (last as HTMLElement).focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); (first as HTMLElement).focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const tid = window.setTimeout(()=> firstInputRef.current?.focus(), 50);
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; window.clearTimeout(tid); };
+  }, [onClose]);
 
   const update = (key: string, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -90,27 +110,20 @@ export function OLTEditModal({ olt, onClose, onUpdated, onDeleted }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label={t.editOltTitle}
+      onClick={onClose}
     >
-      <div className="noc-card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div ref={modalRef} onClick={(e)=> e.stopPropagation()} className="noc-card w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0" role="document">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
           <h2 className="text-lg font-bold text-text-primary tracking-tight">{t.editOltTitle}</h2>
-          <button
-            onClick={onClose}
-            className="text-text-muted hover:text-noc-cyan transition-colors p-1.5 rounded-lg hover:bg-white/[0.04]"
-            aria-label={t.cancel}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <button onClick={onClose} className="text-text-muted hover:text-noc-cyan transition-colors p-1.5 rounded-lg hover:bg-white/[0.04]" aria-label={t.cancel}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
         </div>
-
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 min-h-0">
         {!showConfirm ? (
           <form onSubmit={handleSave} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="label-caps block mb-1.5">{t.colOltName}</label>
-                <input className="noc-input" value={form.name} onChange={(e) => update('name', e.target.value)} required />
+                <input ref={firstInputRef} className="noc-input" value={form.name} onChange={(e) => update('name', e.target.value)} required />
               </div>
               <div>
                 <label className="label-caps block mb-1.5">Vendor / Tipe</label>
@@ -192,11 +205,11 @@ export function OLTEditModal({ olt, onClose, onUpdated, onDeleted }: Props) {
 
             {error && (
               <div className="rounded bg-noc-rose/10 border border-noc-rose/20 px-4 py-3">
-                <span className="font-mono text-xs text-noc-rose">{error}</span>
+                <span role="alert" className="font-mono text-xs text-noc-rose">{error}</span>
               </div>
             )}
 
-            <div className="flex items-center justify-between border-t border-white/[0.06] pt-4">
+            <div className="sticky bottom-0 -mx-6 -mb-5 mt-4 bg-[var(--color-surface-1)]/95 backdrop-blur border-t border-white/[0.06] px-6 py-4 flex items-center justify-between shrink-0">
               <button type="button" onClick={() => setShowConfirm(true)} className="btn-destructive !h-10 !px-6">
                 {t.deleteOlt}
               </button>
@@ -232,7 +245,7 @@ export function OLTEditModal({ olt, onClose, onUpdated, onDeleted }: Props) {
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] pt-4">
+            <div className="sticky bottom-0 -mx-6 -mb-5 mt-4 bg-[var(--color-surface-1)]/95 backdrop-blur border-t border-white/[0.06] px-6 py-4 flex items-center justify-end gap-3 shrink-0">
               <button type="button" onClick={() => { setShowConfirm(false); setConfirmName(''); }} className="btn-secondary !h-10 !px-6">
                 {t.cancel}
               </button>
@@ -247,6 +260,7 @@ export function OLTEditModal({ olt, onClose, onUpdated, onDeleted }: Props) {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

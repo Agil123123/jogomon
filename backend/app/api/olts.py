@@ -272,6 +272,7 @@ async def list_pon_onus(
             pon_id=o.pon_id,
             onu_id=str(o.onu_id),
             serial_number=o.serial_number,
+            name=o.name,
             status=o.status.value,
             rx_power=o.rx_power,
             tx_power=o.tx_power,

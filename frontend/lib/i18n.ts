@@ -110,6 +110,7 @@ export interface Translations {
   worstOnuBadge: string;
   worstOnuSubtitle: string;
   colRank: string;
+  colOnuName: string;
   colSerial: string;
   colLocation: string;
   colRxPower: string;
@@ -401,6 +402,7 @@ const idTranslations: Translations = {
   worstOnuBadge: 'Perlu Ditindak',
   worstOnuSubtitle: 'ONU dengan sinyal optik paling lemah beserta beban trafiknya',
   colRank: 'No',
+  colOnuName: 'Nama ONU',
   colSerial: 'Serial ONU',
   colLocation: 'OLT / PON',
   colRxPower: 'Rx Power',
@@ -691,6 +693,7 @@ const enTranslations: Translations = {
   worstOnuBadge: 'Needs Action',
   worstOnuSubtitle: 'ONUs with the weakest optical signal and their traffic load',
   colRank: 'No',
+  colOnuName: 'ONU Name',
   colSerial: 'ONU Serial',
   colLocation: 'OLT / PON',
   colRxPower: 'Rx Power',

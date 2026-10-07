@@ -13,7 +13,7 @@ const SEVERITY_FILTERS = ['all', 'critical', 'warning', 'info'] as const;
 const STATUS_FILTERS = ['all', 'active', 'acknowledged', 'closed'] as const;
 
 export default function AlarmsPage() {
-  const { isAuthenticated, hydrate } = useAuthStore();
+  const { isAuthenticated, hasHydrated, hydrate } = useAuthStore();
   const { t } = useTranslation();
   const router = useRouter();
   const [alarms, setAlarms] = useState<Alarm[]>([]);
@@ -40,9 +40,10 @@ export default function AlarmsPage() {
   }, [severityFilter, statusFilter]);
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     loadAlarms();
-  }, [isAuthenticated, router, loadAlarms]);
+  }, [isAuthenticated, hasHydrated, router, loadAlarms]);
 
   const handleAck = async (id: string) => {
     await acknowledgeAlarm(id);
@@ -68,6 +69,15 @@ export default function AlarmsPage() {
     }
   };
 
+  if (!hasHydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-full min-h-[60vh]">
+          <div className="w-8 h-8 border-2 border-noc-cyan/30 border-t-noc-cyan rounded-full animate-spin" />
+        </div>
+      </MainLayout>
+    );
+  }
   if (!isAuthenticated) return null;
 
   return (

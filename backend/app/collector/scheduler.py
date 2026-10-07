@@ -332,7 +332,6 @@ async def _upsert_onu(db: AsyncSession, pon_id: uuid.UUID, o: ONUData, now: date
     excluded = stmt.excluded
     set_: dict[str, object] = {
         "status": excluded.status,
-        "name": excluded.name,
         "rx_power": excluded.rx_power,
         "tx_power": excluded.tx_power,
         "olt_rx_power": excluded.olt_rx_power,
@@ -345,6 +344,8 @@ async def _upsert_onu(db: AsyncSession, pon_id: uuid.UUID, o: ONUData, now: date
     # last_seen ke belakang untuk ONU yang tetap offline.
     if o.serial_number is not None:
         set_["serial_number"] = excluded.serial_number
+    if o.name is not None:
+        set_["name"] = excluded.name
     if online:
         set_["last_seen"] = excluded.last_seen
 

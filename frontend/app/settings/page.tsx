@@ -17,7 +17,7 @@ import type { Threshold, PollingInterval } from '@/lib/mock-data';
 type Tab = 'add-olt' | 'thresholds' | 'polling' | 'telegram';
 
 export default function SettingsPage() {
-  const { isAuthenticated, hydrate, user } = useAuthStore();
+  const { isAuthenticated, hasHydrated, hydrate, user } = useAuthStore();
   const { t } = useTranslation();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('add-olt');
@@ -25,9 +25,19 @@ export default function SettingsPage() {
   useEffect(() => { hydrate(); }, [hydrate]);
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (!isAuthenticated) router.push('/login');
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, hasHydrated, router]);
 
+  if (!hasHydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-full min-h-[60vh]">
+          <div className="w-8 h-8 border-2 border-noc-cyan/30 border-t-noc-cyan rounded-full animate-spin" />
+        </div>
+      </MainLayout>
+    );
+  }
   if (!isAuthenticated) return null;
 
   const isAdmin = user?.role === 'admin';
@@ -76,12 +86,13 @@ function AddOLTForm({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
   const [form, setForm] = useState({
     name: '', vendor: 'HSGQ-E04MID', group: '', ip_address: '',
-    ssh_enabled: true, ssh_username: '', ssh_password: '', ssh_port: '22',
+    ssh_enabled: false, ssh_username: '', ssh_password: '', ssh_port: '22',
     snmp_enabled: true, snmp_version: 'v2c', snmp_community: 'public', snmp_port: '161',
   });
   const [knownGroups, setKnownGroups] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Grup yang sudah dipakai armada dijadikan saran, bukan pilihan tertutup:
   // site baru di wilayah baru tetap bisa diisi bebas.
@@ -95,18 +106,22 @@ function AddOLTForm({ isAdmin }: { isAdmin: boolean }) {
     e.preventDefault();
     setSaving(true);
     setSuccess(false);
+    setError(null);
     try {
       await createOLT({
         ...form,
-        ssh_port: parseInt(form.ssh_port),
-        snmp_port: parseInt(form.snmp_port),
+        ssh_port: parseInt(form.ssh_port) || 22,
+        snmp_port: parseInt(form.snmp_port) || 161,
       });
       setSuccess(true);
-      setForm({ name: '', vendor: 'HSGQ-E04MID', group: '', ip_address: '', ssh_enabled: true, ssh_username: '', ssh_password: '', ssh_port: '22', snmp_enabled: true, snmp_version: 'v2c', snmp_community: 'public', snmp_port: '161' });
-    } catch (error) {
-      console.error('Failed to create OLT:', error);
+      setForm({ name: '', vendor: 'HSGQ-E04MID', group: '', ip_address: '', ssh_enabled: false, ssh_username: '', ssh_password: '', ssh_port: '22', snmp_enabled: true, snmp_version: 'v2c', snmp_community: 'public', snmp_port: '161' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Failed to create OLT:', err);
+      setError(msg);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const update = (key: string, value: string | boolean) => setForm(prev => ({ ...prev, [key]: value }));
@@ -210,6 +225,17 @@ function AddOLTForm({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
       </div>
+
+      {error && (
+        <div className="rounded bg-noc-rose/10 border border-noc-rose/20 px-4 py-3 flex flex-col gap-2">
+          <span className="font-mono text-xs text-noc-rose">{error}</span>
+          {(error.toLowerCase().includes('sesi habis') || error.toLowerCase().includes('kredensial') || error.includes('401')) && (
+            <a href="/login" className="btn-primary !h-7 !px-3 !text-xs w-fit">
+              Login ulang
+            </a>
+          )}
+        </div>
+      )}
 
       {success && (
         <div className="flex items-center gap-2 rounded bg-noc-emerald/10 border border-noc-emerald/20 px-4 py-3">

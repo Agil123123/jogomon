@@ -27,7 +27,7 @@ import type {
 } from '@/lib/mock-data';
 
 export default function DashboardPage() {
-  const { isAuthenticated, hydrate } = useAuthStore();
+  const { isAuthenticated, hasHydrated, hydrate } = useAuthStore();
   const { t } = useTranslation();
   const router = useRouter();
 
@@ -48,6 +48,7 @@ export default function DashboardPage() {
   }, [hydrate]);
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (!isAuthenticated) {
       router.push('/login');
       return;
@@ -91,8 +92,17 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, router, group]);
+  }, [isAuthenticated, hasHydrated, router, group]);
 
+  if (!hasHydrated) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-full min-h-[60vh]">
+          <div className="w-8 h-8 border-2 border-noc-cyan/30 border-t-noc-cyan rounded-full animate-spin" />
+        </div>
+      </MainLayout>
+    );
+  }
   if (!isAuthenticated) return null;
 
   if (loading) {

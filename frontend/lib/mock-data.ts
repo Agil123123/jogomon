@@ -68,6 +68,7 @@ export interface ONUDetail {
   pon_id: string;
   onu_id: string;
   serial_number: string;
+  name: string | null;
   status: 'online' | 'offline';
   rx_power: number | null;
   tx_power: number | null;
@@ -438,6 +439,7 @@ export function getMockONUs(ponId: string): ONUDetail[] {
       pon_id: ponId,
       onu_id: String(i + 1),
       serial_number: `HSGQ-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      name: isOffline ? (Math.random() < 0.3 ? null : `Pelanggan ${String(i+1).padStart(2,'0')} - ${['Rumah','Ruko','Kantor','Kios'][Math.floor(Math.random()*4)]} ${['Budi','Sari','Joko','Ani','Rudi'][Math.floor(Math.random()*5)]}`) : `Pelanggan ${String(i+1).padStart(2,'0')} - ${['Rumah','Ruko','Kantor','Kios'][Math.floor(Math.random()*4)]} ${['Budi','Sari','Joko','Ani','Rudi','Dewi','Agus'][Math.floor(Math.random()*7)]}`,
       status: isOffline ? 'offline' as const : 'online' as const,
       rx_power: rx,
       tx_power: rx ? parseFloat((rx + 25 + Math.random() * 3).toFixed(2)) : null,

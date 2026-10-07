@@ -16,7 +16,20 @@ import {
 import { useAuthStore } from './store';
 
 const USE_MOCK = false;
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8100/api';
+const API_BASE_RAW = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, '');
+function getApiBase(): string {
+  if (API_BASE_RAW) return API_BASE_RAW;
+  if (typeof window !== 'undefined') {
+    const { hostname, host, protocol, port } = window.location;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '') {
+      // dev via :3100 tanpa nginx (contoh 157.15.73.34:3100) -> langsung ke :8100
+      if (port === '3100') return `${protocol}//${hostname}:8100/api`;
+      // prod via nginx (jogomon.joglonet.my.id / IP :80/:443) -> same-origin /api
+      return `${protocol}//${host}/api`;
+    }
+  }
+  return 'http://localhost:8100/api';
+}
 
 /** Semua endpoint dashboard menerima scope grup site opsional. Sentinel
  *  "semua grup" tidak dikirim ke backend — absennya param artinya fleet-wide. */
@@ -28,9 +41,19 @@ function scopeQuery(group?: string, extra?: Record<string, string>): string {
 }
 
 // --- Fetch wrapper ---
+// 401 = sesi habis / token invalid -> auto logout + redirect ke /login
+// biar tidak silent "Failed to create OLT: Kredensial tidak valid..."
+let _401Redirecting = false;
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = useAuthStore.getState().token;
-  const res = await fetch(`${API_BASE}${path}`, {
+  let token: string | null = useAuthStore.getState().token;
+  if (!token && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('jm_token');
+      if (raw && raw !== 'null' && raw !== 'undefined') token = raw;
+    } catch {}
+  }
+  const API_BASE = getApiBase();
+  const res = await fetch(`${getApiBase()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -39,8 +62,39 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
+    // 401 khusus: sesi habis / token invalid -> auto logout + redirect. Guard biar tidak spam redirect dari banyak request paralel.
+    if (res.status === 401 && !path.includes('/auth/login')) {
+      const body = await res.json().catch(() => ({ detail: 'Kredensial tidak valid atau token kedaluwarsa' }));
+      const rawDetail =
+        typeof (body as { detail?: unknown })?.detail === 'string'
+          ? (body as { detail: string }).detail
+          : 'Kredensial tidak valid atau token kedaluwarsa';
+      if (!_401Redirecting) {
+        _401Redirecting = true;
+        try { useAuthStore.getState().logout(); } catch {}
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          setTimeout(() => { window.location.href = '/login'; _401Redirecting = false; }, 600);
+        } else { _401Redirecting = false; }
+      }
+      throw new Error(`Sesi habis — silakan login ulang. (${rawDetail})`);
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'API Error');
+    let msg: string;
+    if (Array.isArray((err as unknown as { detail: unknown })?.detail)) {
+      const arr = (err as { detail: unknown[] }).detail;
+      msg = arr.map((d: unknown) => {
+        if (typeof d === 'string') return d;
+        if (d && typeof d === 'object' && 'msg' in d) return String((d as { msg: unknown }).msg);
+        try { return JSON.stringify(d); } catch { return String(d); }
+      }).join(' | ');
+    } else if (typeof (err as { detail?: unknown })?.detail === 'string') {
+      msg = (err as { detail: string }).detail;
+    } else if ((err as { detail?: unknown })?.detail) {
+      try { msg = JSON.stringify((err as { detail: unknown }).detail); } catch { msg = String((err as { detail: unknown }).detail); }
+    } else {
+      msg = res.statusText || `HTTP ${res.status}`;
+    }
+    throw new Error(msg);
   }
   return res.json();
 }
