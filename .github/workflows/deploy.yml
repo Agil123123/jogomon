@@ -9,12 +9,30 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Check secrets
+        run: |
+          missing=0
+          [ -z "${{ secrets.VPS_HOST }}" ] && echo "❌ VPS_HOST belum diisi" && missing=1
+          [ -z "${{ secrets.VPS_USER }}" ] && echo "❌ VPS_USER belum diisi" && missing=1
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ] && [ -z "${{ secrets.VPS_PASSWORD }}" ]; then
+            echo "❌ VPS_SSH_KEY / VPS_PASSWORD belum diisi (salah satu wajib)"
+            missing=1
+          fi
+          if [ $missing -eq 1 ]; then
+            echo ""
+            echo "→ Buka https://github.com/Agil123123/jogomon/settings/secrets/actions"
+            echo "  Tambah: VPS_HOST=103.20.88.83, VPS_USER=root, VPS_PORT=22, VPS_SSH_KEY=(private key) atau VPS_PASSWORD"
+            exit 1
+          fi
+          echo "✅ Secrets OK"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             set -e
