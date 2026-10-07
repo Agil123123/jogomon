@@ -21,10 +21,10 @@ jobs:
           if [ $missing -eq 1 ]; then
             echo ""
             echo "→ Buka https://github.com/Agil123123/jogomon/settings/secrets/actions"
-            echo "  Tambah: VPS_HOST=103.20.88.83, VPS_USER=root, VPS_PORT=22, VPS_SSH_KEY=(private key) atau VPS_PASSWORD"
+            echo "  Tambah: VPS_HOST=103.20.88.83, VPS_USER=fams (bukan root), VPS_PORT=22, VPS_PASSWORD=(password user fams) atau VPS_SSH_KEY"
             exit 1
           fi
-          echo "✅ Secrets OK"
+          echo "✅ Secrets OK — VPS_USER=${{ secrets.VPS_USER }}"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -36,20 +36,24 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             set -e
+            echo "=== Who am I ==="
+            whoami; id
+
             echo "=== Pull latest ==="
-            # /opt/jogomon dulunya di-clone sebagai jogomon:jogomon, jadi root gabisa nulis FETCH_HEAD
-            chown -R root:root /opt/jogomon/.git 2>/dev/null || true
+            # Semua yang butuh root / nulis /opt/jogomon pakai sudo
+            sudo chown -R root:root /opt/jogomon/.git 2>/dev/null || true
             cd /opt/jogomon
             # fallback kalau .git kepemilikan berantakan: re-clone
-            if ! git fetch origin main 2>&1; then
+            if ! sudo git fetch origin main 2>&1; then
               echo "git fetch gagal, re-clone..."
               cd /opt
-              rm -rf jogomon.bak && mv jogomon jogomon.bak || true
-              git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
+              sudo rm -rf jogomon.bak && sudo mv jogomon jogomon.bak || true
+              sudo git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
+              sudo cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
             else
-              git reset --hard origin/main
+              sudo git reset --hard origin/main
             fi
-            chown -R jogomon:jogomon /opt/jogomon
+            sudo chown -R jogomon:jogomon /opt/jogomon
 
             echo "=== Backend: install + migrate ==="
             cd /opt/jogomon/backend
@@ -62,14 +66,14 @@ jobs:
             sudo -u jogomon npm run build
 
             echo "=== Nginx ==="
-            cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
-            nginx -t && systemctl reload nginx
+            sudo cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
+            sudo nginx -t && sudo systemctl reload nginx
 
             echo "=== Restart services ==="
-            systemctl restart jogomon-backend
-            systemctl restart jogomon-frontend
-            systemctl is-active jogomon-backend
-            systemctl is-active jogomon-frontend
+            sudo systemctl restart jogomon-backend
+            sudo systemctl restart jogomon-frontend
+            sudo systemctl is-active jogomon-backend
+            sudo systemctl is-active jogomon-frontend
 
             echo "=== Health check ==="
             sleep 3
