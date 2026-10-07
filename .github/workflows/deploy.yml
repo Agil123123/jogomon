@@ -27,6 +27,8 @@ jobs:
           echo "✅ Secrets OK — VPS_USER=${{ secrets.VPS_USER }}"
 
       - name: Deploy via SSH
+        env:
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -34,59 +36,107 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          envs: VPS_PASSWORD
           script: |
             set -e
             echo "=== Who am I ==="
             whoami; id
+            # Hybrid sudo: kalau NOPASSWD ok pakai sudo langsung, kalau belum pakai -S + VPS_PASSWORD
+            # (VPS_PASSWORD di-pass via envs biar aman karakter spesial)
             if sudo -n true 2>/dev/null; then
               echo "sudo NOPASSWD ok"
+              SUDO="sudo"
             else
-              echo "sudo NOPASSWD BELUM AKTIF — cek visudo: fams ALL=(ALL) NOPASSWD:ALL"
-              echo "Current sudoers for fams:"
-              sudo -l 2>&1 || true
-              exit 1
+              echo "sudo pakai password (fallback)"
+              if [ -z "$VPS_PASSWORD" ]; then echo "VPS_PASSWORD kosong di env — cek Secrets"; exit 1; fi
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S true 2>/dev/null || true
+              SUDO="sudo -S"
+              # wrapper: sudo dengan password
+              sudo() { printf '%s\n' "$VPS_PASSWORD" | command sudo -S "$@"; }
+              export -f sudo 2>/dev/null || true
             fi
 
             echo "=== Pull latest (fix FETCH_HEAD permission) ==="
-            # FIX: chown dulu ke jogomon SEBELUM git, lalu jalankan git sebagai jogomon
-            # sebelumnya .git/FETCH_HEAD milik root -> jogomon tidak bisa tulis -> Permission denied
-            sudo chown -R jogomon:jogomon /opt/jogomon
-            sudo chmod -R u+w /opt/jogomon/.git 2>/dev/null || true
-            cd /opt/jogomon
-            if ! sudo -u jogomon git fetch origin main 2>&1; then
-              echo "git fetch gagal, re-clone..."
-              cd /opt
-              sudo rm -rf jogomon.bak || true
-              sudo mv jogomon jogomon.bak || true
-              sudo git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
-              sudo cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
+            # FIX esensial: chown KE jogomon SEBELUM git, lalu fetch sebagai jogomon
+            if [ "$SUDO" = "sudo" ]; then
               sudo chown -R jogomon:jogomon /opt/jogomon
+              sudo chmod -R u+w /opt/jogomon/.git 2>/dev/null || true
+              cd /opt/jogomon
+              if ! sudo -u jogomon git fetch origin main 2>&1; then
+                echo "git fetch gagal, re-clone..."
+                cd /opt
+                sudo rm -rf jogomon.bak || true
+                sudo mv jogomon jogomon.bak || true
+                sudo git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
+                sudo cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
+                sudo chown -R jogomon:jogomon /opt/jogomon
+              else
+                sudo -u jogomon git reset --hard origin/main
+                sudo chown -R jogomon:jogomon /opt/jogomon
+              fi
+              sudo -u jogomon git -C /opt/jogomon log --oneline -3 || git -C /opt/jogomon log --oneline -3 || true
             else
-              sudo -u jogomon git reset --hard origin/main
-              sudo chown -R jogomon:jogomon /opt/jogomon
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S chown -R jogomon:jogomon /opt/jogomon
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S chmod -R u+w /opt/jogomon/.git 2>/dev/null || true
+              cd /opt/jogomon
+              if ! printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon git fetch origin main 2>&1; then
+                echo "git fetch gagal, re-clone..."
+                cd /opt
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S rm -rf jogomon.bak || true
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S mv jogomon jogomon.bak || true
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S chown -R jogomon:jogomon /opt/jogomon
+              else
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon git reset --hard origin/main
+                printf '%s\n' "$VPS_PASSWORD" | sudo -S chown -R jogomon:jogomon /opt/jogomon
+              fi
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon git -C /opt/jogomon log --oneline -3 2>/dev/null || git -C /opt/jogomon log --oneline -3 || true
             fi
-            sudo -u jogomon git -C /opt/jogomon log --oneline -3 || git -C /opt/jogomon log --oneline -3 || true
 
             echo "=== Backend: install + migrate ==="
             cd /opt/jogomon/backend
-            sudo -u jogomon .venv/bin/pip install -r requirements.txt
-            sudo -u jogomon .venv/bin/alembic upgrade head || true
+            if [ "$SUDO" = "sudo" ]; then
+              sudo -u jogomon .venv/bin/pip install -r requirements.txt
+              sudo -u jogomon .venv/bin/alembic upgrade head || true
+            else
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon .venv/bin/pip install -r requirements.txt
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon .venv/bin/alembic upgrade head || true
+            fi
 
             echo "=== Frontend: install + build ==="
             cd /opt/jogomon/frontend
-            sudo -u jogomon npm ci
-            sudo -u jogomon npm run build
+            if [ "$SUDO" = "sudo" ]; then
+              sudo -u jogomon npm ci
+              sudo -u jogomon npm run build
+            else
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon npm ci
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S -u jogomon npm run build
+            fi
 
             echo "=== Nginx ==="
-            sudo cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
-            sudo nginx -t
-            sudo systemctl reload nginx
+            if [ "$SUDO" = "sudo" ]; then
+              sudo cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
+              sudo nginx -t
+              sudo systemctl reload nginx
+            else
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S nginx -t
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S systemctl reload nginx
+            fi
 
             echo "=== Restart services ==="
-            sudo systemctl restart jogomon-backend
-            sudo systemctl restart jogomon-frontend
-            sudo systemctl is-active jogomon-backend
-            sudo systemctl is-active jogomon-frontend
+            if [ "$SUDO" = "sudo" ]; then
+              sudo systemctl restart jogomon-backend
+              sudo systemctl restart jogomon-frontend
+              sudo systemctl is-active jogomon-backend
+              sudo systemctl is-active jogomon-frontend
+            else
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S systemctl restart jogomon-backend
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S systemctl restart jogomon-frontend
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S systemctl is-active jogomon-backend
+              printf '%s\n' "$VPS_PASSWORD" | sudo -S systemctl is-active jogomon-frontend
+            fi
 
             echo "=== Health check ==="
             sleep 3
