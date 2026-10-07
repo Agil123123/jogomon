@@ -37,47 +37,52 @@ jobs:
           script: |
             set -e
             echo "=== Who am I ==="
-            whoami; id
+            whoami; id; sudo -n true && echo "sudo NOPASSWD ok" || echo "sudo perlu password (pakai -S)"
+
+            # helper: pakai password dari secrets biar sudo jalan meski belum NOPASSWD
+            SUDO_PASS='${{ secrets.VPS_PASSWORD }}'
+            # cache sudo biar next sudo ga minta lagi (5 menit)
+            printf '%s\n' "$SUDO_PASS" | sudo -S true 2>/dev/null || true
 
             echo "=== Pull latest ==="
-            # Semua yang butuh root / nulis /opt/jogomon pakai sudo
-            sudo chown -R root:root /opt/jogomon/.git 2>/dev/null || true
+            printf '%s\n' "$SUDO_PASS" | sudo -S chown -R root:root /opt/jogomon/.git 2>/dev/null || true
             cd /opt/jogomon
-            # fallback kalau .git kepemilikan berantakan: re-clone
-            if ! sudo git fetch origin main 2>&1; then
+            if ! printf '%s\n' "$SUDO_PASS" | sudo -S git fetch origin main 2>&1; then
               echo "git fetch gagal, re-clone..."
               cd /opt
-              sudo rm -rf jogomon.bak && sudo mv jogomon jogomon.bak || true
-              sudo git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
-              sudo cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
+              printf '%s\n' "$SUDO_PASS" | sudo -S rm -rf jogomon.bak || true
+              printf '%s\n' "$SUDO_PASS" | sudo -S mv jogomon jogomon.bak || true
+              printf '%s\n' "$SUDO_PASS" | sudo -S git clone --branch main https://github.com/Agil123123/jogomon.git jogomon
+              printf '%s\n' "$SUDO_PASS" | sudo -S cp /opt/jogomon.bak/.env /opt/jogomon/.env 2>/dev/null || true
             else
-              sudo git reset --hard origin/main
+              printf '%s\n' "$SUDO_PASS" | sudo -S git reset --hard origin/main
             fi
-            sudo chown -R jogomon:jogomon /opt/jogomon
+            printf '%s\n' "$SUDO_PASS" | sudo -S chown -R jogomon:jogomon /opt/jogomon
+            git log --oneline -3
 
             echo "=== Backend: install + migrate ==="
             cd /opt/jogomon/backend
-            sudo -u jogomon .venv/bin/pip install -r requirements.txt
-            sudo -u jogomon .venv/bin/alembic upgrade head || true
+            printf '%s\n' "$SUDO_PASS" | sudo -S -u jogomon .venv/bin/pip install -r requirements.txt
+            printf '%s\n' "$SUDO_PASS" | sudo -S -u jogomon .venv/bin/alembic upgrade head || true
 
             echo "=== Frontend: install + build ==="
             cd /opt/jogomon/frontend
-            sudo -u jogomon npm ci
-            sudo -u jogomon npm run build
+            printf '%s\n' "$SUDO_PASS" | sudo -S -u jogomon npm ci
+            printf '%s\n' "$SUDO_PASS" | sudo -S -u jogomon npm run build
 
             echo "=== Nginx ==="
-            sudo cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
-            sudo nginx -t && sudo systemctl reload nginx
+            printf '%s\n' "$SUDO_PASS" | sudo -S cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
+            printf '%s\n' "$SUDO_PASS" | sudo -S nginx -t
+            printf '%s\n' "$SUDO_PASS" | sudo -S systemctl reload nginx
 
             echo "=== Restart services ==="
-            sudo systemctl restart jogomon-backend
-            sudo systemctl restart jogomon-frontend
-            sudo systemctl is-active jogomon-backend
-            sudo systemctl is-active jogomon-frontend
+            printf '%s\n' "$SUDO_PASS" | sudo -S systemctl restart jogomon-backend
+            printf '%s\n' "$SUDO_PASS" | sudo -S systemctl restart jogomon-frontend
+            printf '%s\n' "$SUDO_PASS" | sudo -S systemctl is-active jogomon-backend
+            printf '%s\n' "$SUDO_PASS" | sudo -S systemctl is-active jogomon-frontend
 
             echo "=== Health check ==="
             sleep 3
-            curl -fsS http://127.0.0.1:8100/health
-            curl -fsS http://127.0.0.1:3100/ | head -c 200
-            echo ""
+            curl -fsS http://127.0.0.1:8100/health; echo
+            curl -fsS http://127.0.0.1:3100/ | head -c 200; echo
             echo "=== DONE ==="
