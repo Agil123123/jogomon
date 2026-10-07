@@ -27,6 +27,8 @@ jobs:
           echo "✅ Secrets OK — VPS_USER=${{ secrets.VPS_USER }}"
 
       - name: Deploy via SSH
+        env:
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
