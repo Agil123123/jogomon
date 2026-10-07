@@ -1,0 +1,52 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            echo "=== Pull latest ==="
+            cd /opt/jogomon
+            git fetch origin main
+            git reset --hard origin/main
+            chown -R jogomon:jogomon /opt/jogomon
+
+            echo "=== Backend: install + migrate ==="
+            cd /opt/jogomon/backend
+            sudo -u jogomon .venv/bin/pip install -r requirements.txt
+            sudo -u jogomon .venv/bin/alembic upgrade head || true
+
+            echo "=== Frontend: install + build ==="
+            cd /opt/jogomon/frontend
+            sudo -u jogomon npm ci
+            sudo -u jogomon npm run build
+
+            echo "=== Nginx ==="
+            cp /opt/jogomon/deploy/nginx/jogomon.conf /etc/nginx/sites-available/jogomon
+            nginx -t && systemctl reload nginx
+
+            echo "=== Restart services ==="
+            systemctl restart jogomon-backend
+            systemctl restart jogomon-frontend
+            systemctl is-active jogomon-backend
+            systemctl is-active jogomon-frontend
+
+            echo "=== Health check ==="
+            sleep 3
+            curl -fsS http://127.0.0.1:8100/health
+            curl -fsS http://127.0.0.1:3100/ | head -c 200
+            echo ""
+            echo "=== DONE ==="
